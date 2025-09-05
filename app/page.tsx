@@ -11,19 +11,18 @@ import ChatInterface from "@/components/ChatInterface"
 import { Upload, MessageCircle, Brain, Shield, Zap, FileText } from "lucide-react"
 
 export default function Home() {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
-  const handleFileSelect = (file: File) => {
-    setSelectedFile(file);
+  const handleFileSelect = (files: File[]) => {
+    setSelectedFiles(files);
   };
 
-  // If a file is selected, show the chat interface
-  if (selectedFile) {
-    const fileUrl = URL.createObjectURL(selectedFile);
+  // If files are selected, show the chat interface
+  if (selectedFiles.length > 0) {
     return (
       <div className="min-h-screen">
         <Navigation />
-        <ChatInterface fileName={selectedFile.name} fileUrl={fileUrl} />
+        <ChatInterface files={selectedFiles} />
       </div>
     );
   }

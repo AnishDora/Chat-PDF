@@ -5,15 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Send, FileText, ChevronDown, Copy, Check } from "lucide-react";
 
 interface ChatInterfaceProps {
-  fileName: string;
-  fileUrl: string;
+  files: File[];
 }
 
-export default function ChatInterface({ fileName, fileUrl }: ChatInterfaceProps) {
+export default function ChatInterface({ files }: ChatInterfaceProps) {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Array<{ id: number; text: string; isUser: boolean; timestamp: Date }>>([]);
   const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
+  const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const selectedFile = files[selectedFileIndex];
+  const selectedFileUrl = selectedFile ? URL.createObjectURL(selectedFile) : "";
 
   const handleSendMessage = () => {
     if (message.trim()) {
@@ -64,11 +67,31 @@ export default function ChatInterface({ fileName, fileUrl }: ChatInterfaceProps)
       <div className="flex-1 flex flex-col min-h-0" style={{ width: "70%" }}>
         {/* Header */}
         <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4">
-          <div className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-blue-600" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Chat with {fileName}
-            </h2>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-blue-600" />
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Chat with PDFs
+              </h2>
+            </div>
+            
+            {/* PDF Selector */}
+            {files.length > 1 && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Viewing:</span>
+                <select
+                  value={selectedFileIndex}
+                  onChange={(e) => setSelectedFileIndex(Number(e.target.value))}
+                  className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {files.map((file, index) => (
+                    <option key={index} value={index}>
+                      {file.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
 
@@ -150,17 +173,28 @@ export default function ChatInterface({ fileName, fileUrl }: ChatInterfaceProps)
           {/* PDF Header */}
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
             <h3 className="font-medium text-gray-900 dark:text-white truncate">
-              {fileName}
+              {selectedFile?.name || "No PDF selected"}
             </h3>
+            {files.length > 1 && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                {selectedFileIndex + 1} of {files.length} PDFs
+              </p>
+            )}
           </div>
           
           {/* PDF Viewer */}
           <div className="flex-1 p-4">
-            <iframe
-              src={fileUrl}
-              className="w-full h-full border border-gray-200 dark:border-gray-600 rounded-lg"
-              title="PDF Viewer"
-            />
+            {selectedFileUrl ? (
+              <iframe
+                src={selectedFileUrl}
+                className="w-full h-full border border-gray-200 dark:border-gray-600 rounded-lg"
+                title="PDF Viewer"
+              />
+            ) : (
+              <div className="w-full h-full border border-gray-200 dark:border-gray-600 rounded-lg flex items-center justify-center bg-gray-50 dark:bg-gray-800">
+                <p className="text-gray-500 dark:text-gray-400">No PDF to display</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
