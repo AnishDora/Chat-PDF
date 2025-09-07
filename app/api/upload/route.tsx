@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { auth } from "@clerk/nextjs/server";
+import { chunkText } from "@/lib/chunk";
+import { embedTexts } from "@/lib/rag";
+// @ts-expect-error: ESM types not provided
+import pdf from "pdf-parse";
 
 export const runtime = "nodejs";
 
@@ -53,7 +57,7 @@ export async function POST(req: NextRequest) {
           throw new Error(`Storage upload failed: ${uploadErr.message}`);
         }
 
-        // Create document record
+        // Create document record (start as processing)
         const { data, error } = await supabaseAdmin
           .from("documents")
           .insert({
@@ -61,7 +65,7 @@ export async function POST(req: NextRequest) {
             title: file.name.replace(/\.pdf$/i, ""),
             storage_path: storagePath,
             bytes: file.size,
-            status: "ready", // Set to ready immediately since there's no processing
+            status: "processing",
           })
           .select()
           .single();
@@ -73,6 +77,53 @@ export async function POST(req: NextRequest) {
             .remove([storagePath]);
           throw new Error(`Database insert failed: ${error.message}`);
         }
+
+        // Extract text from PDF
+        let pageCount: number | undefined = undefined;
+        let text = "";
+        try {
+          const parsed = await pdf(Buffer.from(arrayBuf));
+          text = parsed.text || "";
+          pageCount = parsed.numpages;
+        } catch (e) {
+          console.warn(`Failed to parse PDF text for ${file.name}:`, e);
+        }
+
+        if (text.trim()) {
+          // Chunk
+          const chunks = chunkText(text, { chunkSize: 1500, overlap: 250 });
+          // Embed in batches of 64
+          const batchSize = 64;
+          const allEmbeddings: number[][] = [];
+          for (let i = 0; i < chunks.length; i += batchSize) {
+            const batch = chunks.slice(i, i + batchSize).map((c) => c.content);
+            const embeddings = await embedTexts(batch);
+            allEmbeddings.push(...embeddings);
+          }
+          // Insert chunks
+          const rows = chunks.map((c, idx) => ({
+            user_id: userId,
+            document_id: data.id,
+            chunk_index: c.index,
+            content: c.content,
+            token_count: c.content.length, // rough count; replace with tokenizer if needed
+            embedding: allEmbeddings[idx],
+          }));
+          // Insert in batches to avoid payload size issues
+          for (let i = 0; i < rows.length; i += 500) {
+            const slice = rows.slice(i, i + 500);
+            const { error: insertErr } = await supabaseAdmin
+              .from("document_chunks")
+              .insert(slice);
+            if (insertErr) throw insertErr;
+          }
+        }
+
+        // Update document status
+        await supabaseAdmin
+          .from("documents")
+          .update({ status: "ready", page_count: pageCount ?? null })
+          .eq("id", data.id);
 
         return { success: true, data, file: file.name };
       } catch (error) {
