@@ -6,6 +6,7 @@ import { Navigation } from "@/components/Navigation";
 import ChatList from "@/components/ChatList";
 import ChatInterface from "@/components/ChatInterface";
 import { MessageCircle, Plus, ArrowLeft, FileText } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface Document {
   id: string;
@@ -33,6 +34,8 @@ interface Chat {
 }
 
 export default function Dashboard() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [chatDocuments, setChatDocuments] = useState<Document[]>([]);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
@@ -76,6 +79,21 @@ export default function Dashboard() {
       setLoading(false);
     }
   };
+
+  // If the URL has ?list=1, clear any selected chat and remove the param
+  useEffect(() => {
+    if (searchParams.get("list") === "1") {
+      if (selectedChat) {
+        handleBackToChats();
+      }
+      // Remove the param without adding a new history entry
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("list");
+        router.replace(url.pathname + url.search);
+      } catch {}
+    }
+  }, [searchParams, selectedChat, router]);
 
   const handleCreateNewChat = async () => {
     try {

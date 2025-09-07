@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { FileText, User, LogOut } from "lucide-react";
 import { useUser, useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export function Navigation() {
   const { isSignedIn, user, isLoaded } = useUser();
@@ -18,15 +19,16 @@ export function Navigation() {
   return (
     <nav className="border-b bg-white/80 backdrop-blur-sm dark:bg-slate-900/80">
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-        <div 
-          className="flex items-center space-x-2 cursor-pointer"
-          onClick={() => router.push("/")}
-        >
+        <Link href={isSignedIn ? "/dashboard?list=1" : "/"} className="flex items-center space-x-2">
           <FileText className="h-8 w-8 text-blue-600" />
           <span className="text-2xl font-bold text-slate-900 dark:text-white">PDF AI</span>
-        </div>
+        </Link>
         
         <div className="flex items-center space-x-4">
+          {/* Home / All Chats link */}
+          <Button asChild variant="ghost">
+            <Link href={isSignedIn ? "/dashboard?list=1" : "/"}>{isSignedIn ? "All Chats" : "Home"}</Link>
+          </Button>
           {!isLoaded ? (
             <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-8 w-20 rounded"></div>
           ) : isSignedIn ? (

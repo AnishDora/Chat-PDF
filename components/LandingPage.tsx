@@ -16,7 +16,7 @@ export default function LandingPage() {
 
   const handleGetStarted = () => {
     if (isSignedIn) {
-      router.push("/");
+      router.push("/dashboard");
     } else {
       // This will trigger Clerk's sign-up flow
       router.push("/sign-up");
@@ -80,7 +80,7 @@ export default function LandingPage() {
               <Button
                 size="lg"
                 className="text-lg px-8 py-6"
-                onClick={() => router.push("/")}
+                onClick={() => router.push("/dashboard")}
               >
                 Go to Dashboard
                 <ArrowRight className="ml-2 h-5 w-5" />
