@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 // GET - Get messages for a chat
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
   const userId = session?.userId;
@@ -20,11 +20,13 @@ export async function GET(
     const limit = parseInt(searchParams.get("limit") || "100");
     const offset = parseInt(searchParams.get("offset") || "0");
 
+    const { id } = await ctx.params;
+
     // First verify the chat belongs to the user
     const { data: chat, error: chatError } = await supabaseAdmin
       .from("chats")
       .select("id")
-      .eq("id", params.id)
+      .eq("id", id)
       .eq("user_id", userId)
       .single();
 
@@ -36,7 +38,7 @@ export async function GET(
     const { data: messages, error, count } = await supabaseAdmin
       .from("messages")
       .select("*")
-      .eq("chat_id", params.id)
+      .eq("chat_id", id)
       .eq("user_id", userId)
       .order("created_at", { ascending: true })
       .range(offset, offset + limit - 1);
@@ -63,7 +65,7 @@ export async function GET(
 // POST - Add a message to a chat
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
   const userId = session?.userId;
@@ -79,11 +81,13 @@ export async function POST(
       return NextResponse.json({ error: "Message content is required" }, { status: 400 });
     }
 
+    const { id } = await ctx.params;
+
     // First verify the chat belongs to the user
     const { data: chat, error: chatError } = await supabaseAdmin
       .from("chats")
       .select("id")
-      .eq("id", params.id)
+      .eq("id", id)
       .eq("user_id", userId)
       .single();
 
@@ -95,7 +99,7 @@ export async function POST(
     const { data: message, error } = await supabaseAdmin
       .from("messages")
       .insert({
-        chat_id: params.id,
+        chat_id: id,
         user_id: userId,
         content: content.trim(),
         is_user: is_user,
@@ -111,7 +115,7 @@ export async function POST(
     await supabaseAdmin
       .from("chats")
       .update({ updated_at: new Date().toISOString() })
-      .eq("id", params.id);
+      .eq("id", id);
 
     return NextResponse.json({ 
       message,
