@@ -232,14 +232,7 @@ export default function LandingPage() {
                 Get Started Free
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="text-lg px-8 py-6 border-white text-white hover:bg-white hover:text-blue-600"
-                onClick={handleSignIn}
-              >
-                Sign In
-              </Button>
+              
             </div>
           ) : (
             <Button
