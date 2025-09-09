@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { RefreshCw, AlertCircle } from "lucide-react";
 
 interface PdfViewerProps {
@@ -14,7 +14,7 @@ export default function PdfViewer({ documentId, documentTitle }: PdfViewerProps)
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
 
-  const fetchPdfUrl = async () => {
+  const fetchPdfUrl = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -33,7 +33,7 @@ export default function PdfViewer({ documentId, documentTitle }: PdfViewerProps)
     } finally {
       setLoading(false);
     }
-  };
+  }, [documentId]);
 
   const handleRetry = () => {
     setRetryCount(prev => prev + 1);
@@ -44,7 +44,7 @@ export default function PdfViewer({ documentId, documentTitle }: PdfViewerProps)
     if (documentId) {
       fetchPdfUrl();
     }
-  }, [documentId]);
+  }, [documentId, fetchPdfUrl]);
 
   if (loading) {
     return (

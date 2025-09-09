@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Send, FileText, ChevronDown, Copy, Check, Upload, X } from "lucide-react";
+import { Send, FileText, ChevronDown, Check, Upload, X } from "lucide-react";
 import PdfFilePicker from "@/components/PdfFilePicker";
 import PdfViewer from "@/components/PdfViewer";
 
@@ -22,8 +22,14 @@ interface Message {
   created_at: string;
 }
 
+interface UploadResult {
+  success: boolean;
+  file: string;
+  error?: string;
+  documentId?: string;
+}
+
 interface ChatInterfaceProps {
-  chatId: string;
   chatTitle: string;
   documents: Document[];
   messages: Message[];
@@ -34,7 +40,6 @@ interface ChatInterfaceProps {
 }
 
 export default function ChatInterface({ 
-  chatId, 
   chatTitle, 
   documents, 
   messages, 
@@ -89,7 +94,7 @@ export default function ChatInterface({
     }
   };
 
-  const handleUploadComplete = (results: any[]) => {
+  const handleUploadComplete = (results: UploadResult[]) => {
     const successfulUploads = results.filter(r => r.success);
     if (successfulUploads.length > 0) {
       // Extract document IDs from successful uploads

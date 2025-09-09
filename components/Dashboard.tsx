@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Navigation } from "@/components/Navigation";
 import ChatList from "@/components/ChatList";
 import ChatInterface from "@/components/ChatInterface";
-import { MessageCircle, Plus, ArrowLeft, FileText } from "lucide-react";
+import { MessageCircle, Plus, ArrowLeft } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 interface Document {
@@ -39,7 +39,7 @@ export default function Dashboard() {
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [chatDocuments, setChatDocuments] = useState<Document[]>([]);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(false);
+  // const [loading, setLoading] = useState(false);
 
   // Load chat data when a chat is selected
   useEffect(() => {
@@ -49,7 +49,7 @@ export default function Dashboard() {
   }, [selectedChat]);
 
   const loadChatData = async (chatId: string) => {
-    setLoading(true);
+    // setLoading(true);
     try {
       // Load chat with messages
       const chatResponse = await fetch(`/api/chats/${chatId}`);
@@ -76,7 +76,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Error loading chat data:", error);
     } finally {
-      setLoading(false);
+      // setLoading(false);
     }
   };
 
@@ -298,7 +298,6 @@ export default function Dashboard() {
             {/* Chat Interface */}
             <div className="flex-1">
               <ChatInterface
-                chatId={selectedChat.id}
                 chatTitle={selectedChat.title}
                 documents={chatDocuments}
                 messages={chatMessages}

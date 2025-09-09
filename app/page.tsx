@@ -1,7 +1,6 @@
 "use client";
 
 import { useUser } from "@clerk/nextjs";
-import { useEffect } from "react";
 import LandingPage from "@/components/LandingPage";
 import Dashboard from "@/components/Dashboard";
 
