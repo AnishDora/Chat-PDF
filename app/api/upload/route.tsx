@@ -30,13 +30,19 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    const results = {
-      successful: [] as any[],
-      failed: [] as any[]
+    type SuccessfulDoc = { id: string; title: string };
+    type FailedDoc = { file: string; error: string };
+    type UploadResult =
+      | { success: true; data: SuccessfulDoc; file: string }
+      | { success: false; error: string; file: string };
+
+    const results: { successful: SuccessfulDoc[]; failed: FailedDoc[] } = {
+      successful: [],
+      failed: []
     };
 
     // Process files in parallel for better performance
-    const uploadPromises = files.map(async (file) => {
+    const uploadPromises: Promise<UploadResult>[] = files.map(async (file) => {
       try {
         const storagePath = `pdfs/${userId}/${crypto.randomUUID()}.pdf`;
         const arrayBuf = await file.arrayBuffer();
@@ -74,12 +80,12 @@ export async function POST(req: NextRequest) {
           throw new Error(`Database insert failed: ${error.message}`);
         }
 
-        return { success: true, data, file: file.name };
+        return { success: true, data: { id: data.id, title: data.title }, file: file.name };
       } catch (error) {
-        return { 
-          success: false, 
+        return {
+          success: false,
           error: error instanceof Error ? error.message : "Unknown error",
-          file: file.name 
+          file: file.name,
         };
       }
     });

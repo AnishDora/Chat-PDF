@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 // GET - Get a specific document
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
   const userId = session?.userId;
@@ -16,10 +16,11 @@ export async function GET(
   }
 
   try {
+    const { id } = await params;
     const { data, error } = await supabaseAdmin
       .from("documents")
       .select("*")
-      .eq("id", params.id)
+      .eq("id", id)
       .eq("user_id", userId)
       .single();
 
@@ -43,7 +44,7 @@ export async function GET(
 // PATCH - Update document status or other fields
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
   const userId = session?.userId;
@@ -56,7 +57,7 @@ export async function PATCH(
     const { status, page_count, title } = body;
 
     // Only allow updating specific fields
-    const updateData: any = {};
+    const updateData: { status?: string; page_count?: number; title?: string } = {};
     if (status !== undefined) updateData.status = status;
     if (page_count !== undefined) updateData.page_count = page_count;
     if (title !== undefined) updateData.title = title;
@@ -65,10 +66,11 @@ export async function PATCH(
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
     }
 
+    const { id } = await params;
     const { data, error } = await supabaseAdmin
       .from("documents")
       .update(updateData)
-      .eq("id", params.id)
+      .eq("id", id)
       .eq("user_id", userId)
       .select()
       .single();

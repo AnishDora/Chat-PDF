@@ -36,8 +36,11 @@ export async function GET(
 
     // Sort messages by created_at
     if (chat.messages) {
-      chat.messages.sort((a: any, b: any) => 
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      chat.messages.sort(
+        (
+          a: { created_at: string },
+          b: { created_at: string }
+        ) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
     }
 
@@ -68,7 +71,7 @@ export async function PATCH(
     const { title, document_ids } = body;
 
     // Only allow updating specific fields
-    const updateData: any = {};
+    const updateData: { title?: string; document_ids?: string[]; updated_at?: string } = {};
     if (title !== undefined) updateData.title = title.trim();
     if (document_ids !== undefined) {
       // Verify that all document IDs belong to the user

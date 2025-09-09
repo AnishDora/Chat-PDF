@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Upload, CheckCircle, XCircle, RefreshCw } from "lucide-react";
+import { Upload, RefreshCw } from "lucide-react";
 
 interface UploadResult {
   success: boolean;
@@ -19,7 +19,6 @@ interface PdfFilePickerProps {
 export default function PdfFilePicker({ onUploadComplete, onUploadStart }: PdfFilePickerProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
@@ -51,12 +50,12 @@ export default function PdfFilePicker({ onUploadComplete, onUploadStart }: PdfFi
       
       if (data.success) {
         const results: UploadResult[] = [
-          ...data.documents.map((doc: any) => ({
+          ...data.documents.map((doc: { id: string; title: string }) => ({
             success: true,
             file: doc.title,
             documentId: doc.id,
           })),
-          ...(data.failed || []).map((fail: any) => ({
+          ...(data.failed || []).map((fail: { file: string; error: string }) => ({
             success: false,
             file: fail.file,
             error: fail.error,
@@ -80,7 +79,6 @@ export default function PdfFilePicker({ onUploadComplete, onUploadStart }: PdfFi
       onUploadComplete(results);
     } finally {
       setUploading(false);
-      setUploadProgress({});
     }
     
     // Reset input
