@@ -142,18 +142,19 @@ export default function Dashboard() {
       if (response.ok) {
         // Add message to local state
         setChatMessages(prev => [...prev, data.message]);
-        // Request AI answer constrained to this chat's PDFs
-        const answerRes = await fetch(`/api/chats/${selectedChat.id}/answer`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: content }),
-        });
-        const answerData = await answerRes.json();
-        if (answerRes.ok && answerData.message) {
-          setChatMessages(prev => [...prev, answerData.message]);
-        } else if (!answerRes.ok) {
-          console.error("AI answer error:", answerData.error);
-        }
+        
+        // TODO: Here you would send the message to your AI service
+        // and add the AI response to the messages
+        // For now, we'll just add a placeholder response
+        setTimeout(() => {
+          const aiResponse = {
+            id: `ai-${Date.now()}`,
+            content: "I'm a placeholder AI response. This is where you would integrate with your AI service to process the message and documents.",
+            is_user: false,
+            created_at: new Date().toISOString(),
+          };
+          setChatMessages(prev => [...prev, aiResponse]);
+        }, 1000);
       } else {
         alert("Failed to send message: " + data.error);
       }
