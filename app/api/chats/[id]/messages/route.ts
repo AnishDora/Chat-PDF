@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { auth } from "@clerk/nextjs/server";
+import { ragSystem } from "@/lib/rag";
 
 export const runtime = "nodejs";
 
@@ -83,10 +84,13 @@ export async function POST(
 
     const { id } = await ctx.params;
 
-    // First verify the chat belongs to the user
+    // First verify the chat belongs to the user and get associated documents
     const { data: chat, error: chatError } = await supabaseAdmin
       .from("chats")
-      .select("id")
+      .select(`
+        id,
+        document_ids
+      `)
       .eq("id", id)
       .eq("user_id", userId)
       .single();
@@ -95,32 +99,97 @@ export async function POST(
       return NextResponse.json({ error: "Chat not found" }, { status: 404 });
     }
 
-    // Create the message
-    const { data: message, error } = await supabaseAdmin
+    // Create the user message
+    const { data: userMessage, error: userMessageError } = await supabaseAdmin
       .from("messages")
       .insert({
         chat_id: id,
         user_id: userId,
         content: content.trim(),
-        is_user: is_user,
+        is_user: true,
       })
       .select()
       .single();
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (userMessageError) {
+      return NextResponse.json({ error: userMessageError.message }, { status: 500 });
     }
 
-    // Update the chat's updated_at timestamp
-    await supabaseAdmin
-      .from("chats")
-      .update({ updated_at: new Date().toISOString() })
-      .eq("id", id);
+    // If it's a user message, generate AI response using RAG
+    if (is_user) {
+      try {
+        // Get document IDs associated with this chat
+        const documentIds = chat.document_ids || [];
+        
+        let aiResponse = "I don't have any documents to reference. Please upload some PDFs to this chat first.";
+        
+        if (documentIds.length > 0) {
+          // Generate AI response using RAG
+          aiResponse = await ragSystem.queryDocuments(content.trim(), userId, documentIds);
+        }
 
-    return NextResponse.json({ 
-      message,
-      success: true
-    });
+        // Create the AI response message
+        const { data: aiMessage, error: aiMessageError } = await supabaseAdmin
+          .from("messages")
+          .insert({
+            chat_id: id,
+            user_id: userId,
+            content: aiResponse,
+            is_user: false,
+          })
+          .select()
+          .single();
+
+        if (aiMessageError) {
+          console.error("Error creating AI message:", aiMessageError);
+          // Continue without AI response
+        }
+
+        // Update the chat's updated_at timestamp
+        await supabaseAdmin
+          .from("chats")
+          .update({ updated_at: new Date().toISOString() })
+          .eq("id", id);
+
+        return NextResponse.json({ 
+          userMessage,
+          aiMessage: aiMessage || null,
+          success: true
+        });
+
+      } catch (ragError) {
+        console.error("Error generating AI response:", ragError);
+        
+        // Create a fallback AI message
+        const { data: fallbackMessage } = await supabaseAdmin
+          .from("messages")
+          .insert({
+            chat_id: id,
+            user_id: userId,
+            content: "I encountered an error while processing your question. Please try again.",
+            is_user: false,
+          })
+          .select()
+          .single();
+
+        return NextResponse.json({ 
+          userMessage,
+          aiMessage: fallbackMessage,
+          success: true
+        });
+      }
+    } else {
+      // For non-user messages, just return the message
+      await supabaseAdmin
+        .from("chats")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", id);
+
+      return NextResponse.json({ 
+        message: userMessage,
+        success: true
+      });
+    }
 
   } catch (error) {
     console.error("Error creating message:", error);

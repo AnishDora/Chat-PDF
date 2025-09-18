@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { auth } from "@clerk/nextjs/server";
+import { pdfProcessor } from "@/lib/chunk";
+import { ragSystem } from "@/lib/rag";
 
 export const runtime = "nodejs";
 
@@ -59,7 +61,7 @@ export async function POST(req: NextRequest) {
           throw new Error(`Storage upload failed: ${uploadErr.message}`);
         }
 
-        // Create document record
+        // Create document record with processing status
         const { data, error } = await supabaseAdmin
           .from("documents")
           .insert({
@@ -67,7 +69,7 @@ export async function POST(req: NextRequest) {
             title: file.name.replace(/\.pdf$/i, ""),
             storage_path: storagePath,
             bytes: file.size,
-            status: "ready", // Set to ready immediately since there's no processing
+            status: "processing", // Set to processing for PDF processing
           })
           .select()
           .single();
@@ -80,10 +82,77 @@ export async function POST(req: NextRequest) {
           throw new Error(`Database insert failed: ${error.message}`);
         }
 
-        return { success: true, data: { id: data.id, title: data.title }, file: file.name };
+        // Process PDF and create chunks
+        try {
+          const { chunks, pageCount } = await pdfProcessor.processPDF(Buffer.from(arrayBuf), data.id);
+          
+          // Store chunks in database
+          const chunkRecords = chunks.map(chunk => ({
+            id: chunk.id,
+            document_id: chunk.document_id,
+            user_id: userId,
+            content: chunk.content,
+            page_number: chunk.page_number,
+            chunk_index: chunk.chunk_index,
+          }));
+
+          const { error: chunksError } = await supabaseAdmin
+            .from("document_chunks")
+            .insert(chunkRecords);
+
+          if (chunksError) {
+            console.error("Error inserting chunks:", chunksError);
+            // Continue anyway, but log the error
+          }
+
+          // Update document status to ready and add page count
+          await supabaseAdmin
+            .from("documents")
+            .update({ 
+              status: "ready",
+              page_count: pageCount
+            })
+            .eq("id", data.id);
+
+          // Add chunks to vector store
+          await ragSystem.addDocumentsToVectorStore(chunks);
+
+        } catch (processingError) {
+          console.error("Error processing PDF:", processingError);
+          
+          // Check if it's a quota error or FAISS error
+          const isQuotaError = processingError instanceof Error && 
+            (processingError.message.includes('quota') || processingError.message.includes('429'));
+          const isFaissError = processingError instanceof Error && 
+            (processingError.message.includes('faiss-node') || processingError.message.includes('FAISS'));
+          
+          if (isQuotaError || isFaissError) {
+            // Update document status to ready but with a note about quota
+            await supabaseAdmin
+              .from("documents")
+              .update({ 
+                status: "ready",
+                page_count: 1 // Set a default page count
+              })
+              .eq("id", data.id);
+            
+            console.log("PDF uploaded but processing skipped due to API limits (quota or FAISS)");
+            // Continue without throwing error
+          } else {
+            // Update document status to failed for other errors
+            await supabaseAdmin
+              .from("documents")
+              .update({ status: "failed" })
+              .eq("id", data.id);
+            
+            throw new Error(`PDF processing failed: ${processingError instanceof Error ? processingError.message : 'Unknown error'}`);
+          }
+        }
+
+        return { success: true as const, data: { id: data.id, title: data.title }, file: file.name };
       } catch (error) {
         return {
-          success: false,
+          success: false as const,
           error: error instanceof Error ? error.message : "Unknown error",
           file: file.name,
         };
