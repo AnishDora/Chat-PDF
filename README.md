@@ -78,11 +78,7 @@ modes.
         -   `OPENAI_API_KEY` *(optional)*
         -   `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`
             *(optional)*
-    -   Validate:
-
-    ``` bash
-    npm run check-env
-    ```
+    -   Double-check values are correct before running the app
 
 4.  **Run dev server:**
 
@@ -128,7 +124,7 @@ modes.
 
 -   Never commit real API keys. `.env*` is git-ignored.
 -   Use `.env.local.example` to document required env vars.
--   `setup-api-key.js` allows easy key injection via CLI.
+  
 
 ------------------------------------------------------------------------
 
@@ -157,7 +153,6 @@ modes.
 npm run dev        # start dev server
 npm run build      # production build
 npm run lint       # lint code
-npm run check-env  # validate env variables
 ```
 
 ------------------------------------------------------------------------

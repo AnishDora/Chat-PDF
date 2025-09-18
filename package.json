@@ -6,9 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "setup-env": "node setup-env.js",
-    "check-env": "node check-env.js"
+    "lint": "eslint"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.31.6",
