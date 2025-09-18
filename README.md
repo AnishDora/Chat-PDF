@@ -185,6 +185,6 @@ with in‑process memory vector store + robust fallback search.
 --------------------------------------------------------------------------
 
 <img width="1470" height="803" alt="Screenshot 2025-09-17 at 22 29 21" src="https://github.com/user-attachments/assets/02044c2b-a777-4bb2-a8d2-771547237200" />
-<img width="1470" height="803" alt="Screenshot 2025-09-17 at 22 29 39" src="https://github.com/user-attachments/assets/cde556d6-aba7-4936-b66e-22332e272da0" />
-<img width="1470" height="803" alt="Screenshot 2025-09-17 at 22 29 08" src="https://github.com/user-attachments/assets/4b91285a-4af3-4dae-b2d1-f6ca057370cb" />
+<img width="1470" height="797" alt="Screenshot 2025-09-18 at 00 13 02" src="https://github.com/user-attachments/assets/a584e88e-d0b8-4202-a3e3-c4ed6cf0536a" />
+<img width="1470" height="799" alt="Screenshot 2025-09-18 at 00 13 14" src="https://github.com/user-attachments/assets/8896c850-fc9b-4979-b017-db333f2a7a4b" />
 <img width="1470" height="803" alt="Screenshot 2025-09-17 at 22 28 42" src="https://github.com/user-attachments/assets/b2aff095-e81f-4c2b-b653-438aa94bb5b0" />
