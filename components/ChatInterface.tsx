@@ -100,7 +100,9 @@ export default function ChatInterface({
       // Extract document IDs from successful uploads
       const documentIds = successfulUploads
         .filter(r => r.documentId)
+
         .map(r => r.documentId!);
+
       
       if (documentIds.length > 0) {
         onAddDocuments(documentIds);

@@ -140,6 +140,7 @@ export default function Dashboard() {
       const data = await response.json();
       
       if (response.ok) {
+
         // Add user message to local state
         if (data.userMessage) {
           setChatMessages(prev => [...prev, data.userMessage]);

@@ -64,6 +64,7 @@ CREATE POLICY "Users can delete their own PDFs" ON storage.objects
     auth.uid()::text = (storage.foldername(name))[1]
   );
 
+
 -- Create document_chunks table for storing processed PDF chunks
 CREATE TABLE IF NOT EXISTS public.document_chunks (
   id text PRIMARY KEY,
@@ -201,3 +202,4 @@ CREATE POLICY "Users can delete chat_documents for their chats" ON public.chat_d
       AND chats.user_id = auth.uid()::text
     )
   );
+
