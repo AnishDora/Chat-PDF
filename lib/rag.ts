@@ -19,8 +19,10 @@ export class RAGSystem {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private vectorStore: any = null;
   private isInitialized = false;
+  private hasKey = Boolean(process.env.OPENAI_API_KEY);
 
   constructor() {
+    // Initialize clients only if key exists
     this.openai = new ChatOpenAI({
       apiKey: process.env.OPENAI_API_KEY,
       model: 'gpt-4o-mini',
@@ -55,6 +57,12 @@ export class RAGSystem {
 
   async initializeVectorStore(userId: string, documentIds: string[]): Promise<void> {
     try {
+      if (!this.hasKey) {
+        // No embeddings possible without key; mark as initialized with no vector store
+        this.vectorStore = null;
+        this.isInitialized = true;
+        return;
+      }
       // Get all chunks for the user's documents
       const { data: chunks, error } = await supabaseAdmin
         .from('document_chunks')
@@ -107,6 +115,10 @@ export class RAGSystem {
 
   async addDocumentsToVectorStore(chunks: DocumentChunk[]): Promise<void> {
     try {
+      if (!this.hasKey) {
+        // Without key, skip vector ops; rely on fallback at query time
+        return;
+      }
       const documents = chunks.map(chunk => new Document({
         pageContent: chunk.content,
         metadata: {
@@ -213,6 +225,9 @@ Answer based on the documents:`);
 
   async queryDocuments(query: string, userId: string, documentIds: string[]): Promise<string> {
     try {
+      if (!this.hasKey) {
+        return await fallbackRagSystem.queryDocuments(query, userId, documentIds);
+      }
       // Initialize vector store if not already done
       if (!this.isInitialized) {
         await this.initializeVectorStore(userId, documentIds);
