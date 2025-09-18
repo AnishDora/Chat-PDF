@@ -7,9 +7,11 @@ import { supabaseAdmin } from './supabaseAdmin';
 import { DocumentChunk } from './chunk';
 import { fallbackRagSystem } from './rag-fallback';
 
-// Dynamic import for FAISS to handle potential import issues
+// Dynamic imports for vector stores to avoid native dependency crashes in serverless
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let FaissStore: any = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let MemoryVectorStore: any = null;
 
 export class RAGSystem {
   private openai: ChatOpenAI;
@@ -32,15 +34,23 @@ export class RAGSystem {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async initializeFaiss(): Promise<any> {
     if (FaissStore) return FaissStore;
-    
     try {
       const { FaissStore: FaissStoreClass } = await import('@langchain/community/vectorstores/faiss');
       FaissStore = FaissStoreClass;
       return FaissStore;
-    } catch (error) {
-      console.error('Failed to import FAISS:', error);
-      throw new Error('FAISS vector store is not available. Please check your dependencies.');
+    } catch {
+      // Don't throw; we will fallback to memory vector store
+      console.warn('FAISS not available, will fallback to MemoryVectorStore');
+      return null;
     }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async initializeMemoryStore(): Promise<any> {
+    if (MemoryVectorStore) return MemoryVectorStore;
+    const { MemoryVectorStore: MemoryStoreClass } = await import('langchain/vectorstores/memory');
+    MemoryVectorStore = MemoryStoreClass;
+    return MemoryVectorStore;
   }
 
   async initializeVectorStore(userId: string, documentIds: string[]): Promise<void> {
@@ -76,7 +86,18 @@ export class RAGSystem {
 
       // Create embeddings and vector store
       const FaissStoreClass = await this.initializeFaiss();
-      this.vectorStore = await FaissStoreClass.fromDocuments(documents, this.embeddings);
+      if (FaissStoreClass) {
+        try {
+          this.vectorStore = await FaissStoreClass.fromDocuments(documents, this.embeddings);
+        } catch (e) {
+          console.warn('FAISS failed at runtime, falling back to MemoryVectorStore:', e);
+        }
+      }
+
+      if (!this.vectorStore) {
+        const MemoryStoreClass = await this.initializeMemoryStore();
+        this.vectorStore = await MemoryStoreClass.fromDocuments(documents, this.embeddings);
+      }
       this.isInitialized = true;
     } catch (error) {
       console.error('Error initializing vector store:', error);
@@ -97,13 +118,23 @@ export class RAGSystem {
         }
       }));
 
-      if (this.vectorStore) {
+      if (this.vectorStore?.addDocuments) {
         // Add to existing vector store
         await this.vectorStore.addDocuments(documents);
       } else {
-        // Create new vector store
+        // Create new vector store with best available backend
         const FaissStoreClass = await this.initializeFaiss();
-        this.vectorStore = await FaissStoreClass.fromDocuments(documents, this.embeddings);
+        if (FaissStoreClass) {
+          try {
+            this.vectorStore = await FaissStoreClass.fromDocuments(documents, this.embeddings);
+          } catch (e) {
+            console.warn('FAISS failed at runtime, falling back to MemoryVectorStore:', e);
+          }
+        }
+        if (!this.vectorStore) {
+          const MemoryStoreClass = await this.initializeMemoryStore();
+          this.vectorStore = await MemoryStoreClass.fromDocuments(documents, this.embeddings);
+        }
       }
     } catch (error) {
       console.error('Error adding documents to vector store:', error);
