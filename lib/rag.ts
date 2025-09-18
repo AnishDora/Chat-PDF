@@ -21,11 +21,11 @@ export class RAGSystem {
   constructor() {
     this.openai = new ChatOpenAI({
       apiKey: process.env.OPENAI_API_KEY,
-      modelName: 'gpt-3.5-turbo',
+      model: 'gpt-4o-mini',
     });
     this.embeddings = new OpenAIEmbeddings({
       apiKey: process.env.OPENAI_API_KEY,
-      modelName: 'text-embedding-ada-002',
+      model: 'text-embedding-3-small',
     });
   }
 
