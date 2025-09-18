@@ -140,21 +140,16 @@ export default function Dashboard() {
       const data = await response.json();
       
       if (response.ok) {
-        // Add message to local state
-        setChatMessages(prev => [...prev, data.message]);
+
+        // Add user message to local state
+        if (data.userMessage) {
+          setChatMessages(prev => [...prev, data.userMessage]);
+        }
         
-        // TODO: Here you would send the message to your AI service
-        // and add the AI response to the messages
-        // For now, we'll just add a placeholder response
-        setTimeout(() => {
-          const aiResponse = {
-            id: `ai-${Date.now()}`,
-            content: "I'm a placeholder AI response. This is where you would integrate with your AI service to process the message and documents.",
-            is_user: false,
-            created_at: new Date().toISOString(),
-          };
-          setChatMessages(prev => [...prev, aiResponse]);
-        }, 1000);
+        // Add AI response if available
+        if (data.aiMessage) {
+          setChatMessages(prev => [...prev, data.aiMessage]);
+        }
       } else {
         alert("Failed to send message: " + data.error);
       }
