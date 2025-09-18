@@ -168,8 +168,9 @@ Native FAISS dependency was removed to avoid runtime issues --- replaced
 with in‑process memory vector store + robust fallback search.
 
 --------------------------------------------------------------------------
-<img width="1468" height="800" alt="Screenshot 2025-09-17 at 22 28 54" src="https://github.com/user-attachments/assets/36724bd8-e054-4da4-9e6c-8107c98a375f" />
-<img width="1470" height="803" alt="Screenshot 2025-09-17 at 22 28 42" src="https://github.com/user-attachments/assets/b2aff095-e81f-4c2b-b653-438aa94bb5b0" />
-<img width="1470" height="803" alt="Screenshot 2025-09-17 at 22 29 08" src="https://github.com/user-attachments/assets/f48a60ea-17e9-4ecf-b287-d3def2d02e48" />
+
 <img width="1470" height="803" alt="Screenshot 2025-09-17 at 22 29 21" src="https://github.com/user-attachments/assets/02044c2b-a777-4bb2-a8d2-771547237200" />
 <img width="1470" height="803" alt="Screenshot 2025-09-17 at 22 29 39" src="https://github.com/user-attachments/assets/cde556d6-aba7-4936-b66e-22332e272da0" />
+<img width="1470" height="803" alt="Screenshot 2025-09-17 at 22 29 08" src="https://github.com/user-attachments/assets/f48a60ea-17e9-4ecf-b287-d3def2d02e48" />
+<img width="1468" height="800" alt="Screenshot 2025-09-17 at 22 28 54" src="https://github.com/user-attachments/assets/36724bd8-e054-4da4-9e6c-8107c98a375f" />
+<img width="1470" height="803" alt="Screenshot 2025-09-17 at 22 28 42" src="https://github.com/user-attachments/assets/b2aff095-e81f-4c2b-b653-438aa94bb5b0" />
