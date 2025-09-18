@@ -1,5 +1,6 @@
 // Fallback RAG system that works without OpenAI API calls
-// Use this when you don't have OpenAI API access or have exceeded quota
+// Uses simple database keyword search against stored chunks
+import { supabaseAdmin } from './supabaseAdmin';
 
 export interface DocumentChunk {
   id: string;
@@ -50,17 +51,60 @@ export class FallbackRAGSystem {
         return "I don't have any documents to search through. Please upload some PDFs first.";
       }
 
-      // Enhanced fallback response with more helpful information
-      return `I can see you have ${documentIds.length} document(s) uploaded to this chat, but I'm currently in fallback mode due to API limitations. 
+      // Very simple keyword-driven search without embeddings
+      const term = query.toLowerCase().match(/[a-z0-9+#\.\-]{2,}/g)?.slice(0, 5) || [];
+      if (term.length === 0) {
+        return "I couldn't extract useful keywords from your question.";
+      }
 
-Your question: "${query}"
+      const likePatterns = term.map(t => `%${t}%`);
 
-To get AI-powered answers based on your PDFs, please:
-1. Check your OpenAI billing: https://platform.openai.com/account/billing
-2. Ensure you have sufficient API credits
-3. Try again once the API is available
+      // Try a full-text search first; fall back to ILIKE OR chain
+      let hits: { content: string; page_number: number; document_id: string }[] = [];
+      const { data: ftData, error: ftErr } = await supabaseAdmin
+        .from('document_chunks')
+        .select('content,page_number,document_id')
+        .in('document_id', documentIds)
+        .textSearch('content', term.join(' & '), { type: 'websearch' })
+        .limit(10);
 
-The documents are safely stored and will be processed once the API is restored.`;
+      if (!ftErr && ftData) {
+        hits = ftData as typeof hits;
+      } else {
+        // Fallback to ILIKE OR conditions
+        let q = supabaseAdmin
+          .from('document_chunks')
+          .select('content,page_number,document_id')
+          .in('document_id', documentIds)
+          .limit(10);
+        for (const p of likePatterns) {
+          q = q.or(`content.ilike.${p}`);
+        }
+        const { data: likeData } = await q;
+        if (likeData) hits = likeData as typeof hits;
+      }
+
+      if (hits.length === 0) {
+        return "I couldn't find information in your PDFs matching that question.";
+      }
+
+      // Build a concise, deterministic answer
+      const snippets = hits.map(h => {
+        const idx = h.content.toLowerCase().indexOf(term[0]);
+        const start = Math.max(0, idx - 60);
+        const end = Math.min(h.content.length, (idx === -1 ? 120 : idx + 60));
+        const snippet = h.content.slice(start, end).replace(/\s+/g, ' ').trim();
+        return `- p.${h.page_number}: "${snippet}"`;
+      });
+
+      // Lightweight yes/no heuristic for skill presence
+      const skill = term.find(t => /[a-z]+/.test(t)) || term[0];
+      const affirmative = hits.some(h => h.content.toLowerCase().includes(skill));
+      const header = affirmative
+        ? `Yes — the PDFs mention "${skill}".`
+        : `Not explicitly mentioned, but related text found for "${skill}".`;
+
+      return `${header}\nTop matches:\n${snippets.join('\n')}`;
     } catch (error) {
       console.error('Error in fallback RAG:', error);
       return "I encountered an error while processing your question. Please try again later.";
