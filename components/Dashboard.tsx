@@ -7,14 +7,18 @@ import ChatList from "@/components/ChatList";
 import ChatInterface from "@/components/ChatInterface";
 import { MessageCircle, Plus, ArrowLeft } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { SourceType } from "@/lib/sourceTypes";
 
 interface Document {
   id: string;
   title: string;
   status: "processing" | "ready" | "failed";
-  bytes: number;
-  page_count?: number;
+  source_type: SourceType;
+  source_url?: string | null;
+  bytes?: number | null;
+  page_count?: number | null;
   created_at: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 interface Message {

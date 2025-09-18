@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { auth } from "@clerk/nextjs/server";
 import { ragSystem } from "@/lib/rag";
+import { generateChatTitleFromMessage } from "@/lib/generateTitle";
 
 export const runtime = "nodejs";
 
@@ -89,6 +90,7 @@ export async function POST(
       .from("chats")
       .select(`
         id,
+        title,
         document_ids
       `)
       .eq("id", id)
@@ -113,6 +115,43 @@ export async function POST(
 
     if (userMessageError) {
       return NextResponse.json({ error: userMessageError.message }, { status: 500 });
+    }
+
+    const chatUpdates: { title?: string; updated_at: string } = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (
+      is_user &&
+      chat.title &&
+      /^new chat/i.test(chat.title.trim())
+    ) {
+      let documentTitles: string[] = [];
+      if (Array.isArray(chat.document_ids) && chat.document_ids.length > 0) {
+        const { data: docs, error: docsError } = await supabaseAdmin
+          .from("documents")
+          .select("title")
+          .in("id", chat.document_ids);
+
+        if (docsError) {
+          console.error("Error fetching document titles for chat naming:", docsError);
+        } else {
+          documentTitles = (docs || [])
+            .map(doc => (typeof doc.title === "string" ? doc.title : null))
+            .filter((title): title is string => Boolean(title && title.trim()))
+            .map(title => title.trim());
+        }
+      }
+
+      const generatedTitle = await generateChatTitleFromMessage(
+        content.trim(),
+        documentTitles,
+        chat.title
+      );
+
+      if (generatedTitle && generatedTitle !== chat.title) {
+        chatUpdates.title = generatedTitle;
+      }
     }
 
     // If it's a user message, generate AI response using RAG
@@ -145,10 +184,9 @@ export async function POST(
           // Continue without AI response
         }
 
-        // Update the chat's updated_at timestamp
         await supabaseAdmin
           .from("chats")
-          .update({ updated_at: new Date().toISOString() })
+          .update(chatUpdates)
           .eq("id", id);
 
         return NextResponse.json({ 
@@ -172,6 +210,11 @@ export async function POST(
           .select()
           .single();
 
+        await supabaseAdmin
+          .from("chats")
+          .update(chatUpdates)
+          .eq("id", id);
+
         return NextResponse.json({ 
           userMessage,
           aiMessage: fallbackMessage,
@@ -182,7 +225,7 @@ export async function POST(
       // For non-user messages, just return the message
       await supabaseAdmin
         .from("chats")
-        .update({ updated_at: new Date().toISOString() })
+        .update(chatUpdates)
         .eq("id", id);
 
       return NextResponse.json({ 

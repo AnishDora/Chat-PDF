@@ -1,14 +1,15 @@
 # RAG Implementation Setup Guide
 
 ## Overview
-This implementation adds RAG (Retrieval-Augmented Generation) functionality to your chat-pdf application using LangChain. The AI will now answer questions based only on the uploaded PDF documents.
+This implementation upgrades the RAG (Retrieval-Augmented Generation) experience for chat-pdf using LangChain. The assistant now reasons over multiple source types—PDFs, scraped URLs, and OCR'd screenshots—while delivering grounded answers with inline citations and graceful fallbacks.
 
 ## Features Added
-- PDF text extraction and chunking
-- Vector embeddings using OpenAI
-- FAISS vector store for similarity search
-- RAG-based question answering
-- Document chunk storage in Supabase
+- PDF, URL, and screenshot ingestion with automatic title suggestions
+- Text extraction & chunking (1000 character segments) for efficient retrieval
+- Vector embeddings using OpenAI (with automatic fallback to keyword search)
+- Inline citations (`[n]`) plus a summarized "Sources" section in every answer
+- Conversation export to PDF via jsPDF
+- Document chunk storage in Supabase for persistence
 
 ## Required Environment Variables
 Add these to your `.env.local` file:
@@ -37,32 +38,42 @@ Run the updated `supabase-setup.sql` file in your Supabase SQL editor to create 
 **For new setups**, just run the `supabase-setup.sql` script.
 
 ## How It Works
-1. **PDF Upload**: When a PDF is uploaded, it's processed to extract text and create chunks
-2. **Chunking**: Text is split into manageable chunks with overlap for better context
-3. **Embeddings**: Each chunk is converted to vector embeddings using OpenAI
-4. **Storage**: Chunks and embeddings are stored in the database and FAISS vector store
-5. **Querying**: When a user asks a question, relevant chunks are retrieved and used to generate an answer
+1. **Source Upload**
+   - PDFs → `pdf-parse`
+   - URLs → Headless Chromium via Puppeteer + Cheerio
+   - Screenshots → OpenAI Vision OCR
+2. **Chunking**: Extracted text is split into overlapping 1000-character chunks.
+3. **Metadata Enrichment**: AI-generated titles, source types, URLs, and page estimates are attached to each chunk.
+4. **Embeddings**: Chunks are embedded with OpenAI (`text-embedding-3-small`) and stored in an in-memory vector store (FAISS if available, otherwise LangChain MemoryVectorStore).
+5. **Querying**: Top-k chunks are retrieved, numbered, and passed to `gpt-4o-mini`. Responses include inline citations and a human-readable sources list. When OpenAI is unavailable, the system falls back to deterministic keyword/full-text search with summaries.
 
 ## Key Files Added/Modified
-- `lib/chunk.ts` - PDF processing and text chunking
-- `lib/rag.ts` - RAG system with vector search and answer generation
-- `app/api/upload/route.tsx` - Updated to process PDFs and create embeddings
-- `app/api/chats/[id]/messages/route.tsx` - Updated to use RAG for responses
-- `supabase-setup.sql` - Updated database schema
+- `lib/chunk.ts` — shared chunking utilities
+- `lib/sources/url.ts` — Puppeteer + Cheerio web scraping
+- `lib/sources/image.ts` — OpenAI Vision OCR for screenshots
+- `lib/generateTitle.ts` — AI title suggestions for uploaded sources
+- `lib/rag.ts` — RAG pipeline with citation-aware prompting and metadata tracking
+- `lib/rag-fallback.ts` — metadata-aware keyword/full-text fallback search
+- `app/api/upload/route.ts` — multi-source ingest pipeline and vector updates
+- `app/api/documents/[id]/view/route.ts` — signed URLs + preview snippets per source type
+- `components/SourceUploader.tsx` and `components/DocumentViewer.tsx` — front-end source management
+- `components/ExportConversationButton.tsx` — conversation PDF export
+- `supabase-setup.sql` — `documents` table now includes `source_type`, `source_url`, and JSON metadata
 
 ## Usage
-1. Upload PDF documents to a chat
-2. Wait for processing to complete (status will show "ready")
-3. Ask questions about the documents
-4. The AI will answer based only on the uploaded PDF content
+1. Upload one or more sources (PDFs, URLs, screenshots) to a chat.
+2. Wait for processing to complete (status = `ready`).
+3. Ask questions—responses cite the exact source passages used.
+4. Export the conversation as a PDF if needed.
 
 ## Error Handling
-- If PDF processing fails, the document status will be set to "failed"
-- If RAG processing fails, a fallback error message will be shown
-- All errors are logged for debugging
+- Upload failures mark the source as `failed` and preserve error details.
+- Screenshot OCR requires `OPENAI_API_KEY`; without it, uploads are rejected.
+- If embeddings fail because of quota or FAISS issues, the system falls back to keyword/full-text retrieval.
+- All significant issues are logged server-side for debugging.
 
 ## Performance Notes
-- PDF processing happens during upload
-- Vector store is initialized per chat session
-- Chunks are stored persistently in the database
-- FAISS vector store provides fast similarity search
+- Source processing happens during upload; URLs use headless Chromium (ensure the host supports Puppeteer).
+- Vector store state is cached per server instance; `resetVectorStore()` clears it when needed.
+- Chunks live in Postgres for durability, while embeddings stay in-process for speed.
+- Citations are computed from chunk metadata, so document titles and URLs are surfaced automatically.

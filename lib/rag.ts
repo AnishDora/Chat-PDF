@@ -6,12 +6,19 @@ import { RunnableSequence } from '@langchain/core/runnables';
 import { supabaseAdmin } from './supabaseAdmin';
 import { DocumentChunk } from './chunk';
 import { fallbackRagSystem } from './rag-fallback';
+import { SOURCE_TYPE_LABELS, SourceType } from './sourceTypes';
 
 // Dynamic imports for vector stores to avoid native dependency crashes in serverless
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let FaissStore: any = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let MemoryVectorStore: any = null;
+
+interface DocumentMetadataEntry {
+  title?: string;
+  source_type?: SourceType | string;
+  source_url?: string | null;
+}
 
 export class RAGSystem {
   private openai: ChatOpenAI;
@@ -20,6 +27,7 @@ export class RAGSystem {
   private vectorStore: any = null;
   private isInitialized = false;
   private hasKey = Boolean(process.env.OPENAI_API_KEY);
+  private documentMetadata = new Map<string, DocumentMetadataEntry>();
 
   constructor() {
     // Initialize clients only if key exists
@@ -31,6 +39,28 @@ export class RAGSystem {
       apiKey: process.env.OPENAI_API_KEY,
       model: 'text-embedding-3-small',
     });
+  }
+
+  private mergeDocumentMetadata(documentId: string, metadata: DocumentMetadataEntry): void {
+    const existing = this.documentMetadata.get(documentId) ?? {};
+    this.documentMetadata.set(documentId, {
+      title: metadata.title ?? existing.title,
+      source_type: metadata.source_type ?? existing.source_type,
+      source_url: metadata.source_url ?? existing.source_url,
+    });
+  }
+
+  private getDocumentMetadata(documentId: string): DocumentMetadataEntry {
+    return this.documentMetadata.get(documentId) ?? {};
+  }
+
+  private resolveSourceTypeLabel(type?: string | null): string {
+    if (!type) return 'Document';
+    const labels = SOURCE_TYPE_LABELS as Record<string, string>;
+    if (labels[type]) {
+      return labels[type];
+    }
+    return `${type.charAt(0).toUpperCase()}${type.slice(1)}`;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -80,17 +110,45 @@ export class RAGSystem {
         return;
       }
 
+      const { data: docRecords, error: docMetaError } = await supabaseAdmin
+        .from('documents')
+        .select('id,title,source_type,source_url')
+        .in('id', documentIds)
+        .eq('user_id', userId);
+
+      if (docMetaError) {
+        throw new Error(`Failed to fetch document metadata: ${docMetaError.message}`);
+      }
+
+      const docMetaMap = new Map<string, DocumentMetadataEntry>();
+      (docRecords || []).forEach((doc: { id: string; title: string | null; source_type: string | null; source_url: string | null }) => {
+        const meta: DocumentMetadataEntry = {
+          title: doc.title ?? undefined,
+          source_type: doc.source_type ?? undefined,
+          source_url: doc.source_url ?? undefined,
+        };
+        docMetaMap.set(doc.id, meta);
+        this.mergeDocumentMetadata(doc.id, meta);
+      });
+
       // Convert chunks to LangChain documents
-      const documents = chunks.map((chunk: { content: string; id: string; document_id: string; page_number: number; chunk_index: number }) => new Document({
-        pageContent: chunk.content,
-        metadata: {
-          id: chunk.id,
-          document_id: chunk.document_id,
-          page_number: chunk.page_number,
-          chunk_index: chunk.chunk_index,
-          source: chunk.document_id,
-        }
-      }));
+      const documents = chunks.map((chunk: { content: string; id: string; document_id: string; page_number: number; chunk_index: number }) => {
+        const storedMeta = docMetaMap.get(chunk.document_id) ?? this.getDocumentMetadata(chunk.document_id);
+        return new Document({
+          pageContent: chunk.content,
+          metadata: {
+            id: chunk.id,
+            document_id: chunk.document_id,
+            page_number: chunk.page_number,
+            page: chunk.page_number,
+            chunk_index: chunk.chunk_index,
+            source: chunk.document_id,
+            title: storedMeta.title,
+            source_type: storedMeta.source_type,
+            source_url: storedMeta.source_url,
+          }
+        });
+      });
 
       // Create embeddings and vector store
       const FaissStoreClass = await this.initializeFaiss();
@@ -119,16 +177,31 @@ export class RAGSystem {
         // Without key, skip vector ops; rely on fallback at query time
         return;
       }
-      const documents = chunks.map(chunk => new Document({
-        pageContent: chunk.content,
-        metadata: {
-          id: chunk.id,
-          document_id: chunk.document_id,
-          page_number: chunk.page_number,
-          chunk_index: chunk.chunk_index,
-          source: chunk.document_id,
-        }
-      }));
+      chunks.forEach(chunk => {
+        const meta = chunk.metadata ?? { source: chunk.document_id };
+        this.mergeDocumentMetadata(chunk.document_id, {
+          title: meta.title ?? undefined,
+          source_type: meta.source_type ?? undefined,
+          source_url: meta.source_url ?? undefined,
+        });
+      });
+      const documents = chunks.map(chunk => {
+        const stored = this.getDocumentMetadata(chunk.document_id);
+        return new Document({
+          pageContent: chunk.content,
+          metadata: {
+            id: chunk.id,
+            document_id: chunk.document_id,
+            page_number: chunk.page_number,
+            page: chunk.page_number,
+            chunk_index: chunk.chunk_index,
+            source: chunk.document_id,
+            title: stored.title,
+            source_type: stored.source_type,
+            source_url: stored.source_url,
+          }
+        });
+      });
 
       if (this.vectorStore?.addDocuments) {
         // Add to existing vector store
@@ -185,38 +258,57 @@ export class RAGSystem {
 
   async generateAnswer(query: string, relevantChunks: Document[]): Promise<string> {
     try {
-      // Create context from relevant chunks
-      const context = relevantChunks
-        .map(chunk => `Page ${chunk.metadata.page_number}: ${chunk.pageContent}`)
+      const contextEntries = relevantChunks.map((chunk, index) => {
+        const meta = (chunk.metadata ?? {}) as Record<string, unknown>;
+        const docId = (meta.document_id as string) || (meta.source as string) || `document-${index + 1}`;
+        const storedMeta = this.getDocumentMetadata(docId);
+        const title = (meta.title as string) || storedMeta.title || `Document ${docId}`;
+        const rawSourceType = (meta.source_type as string) || (storedMeta.source_type as string) || undefined;
+        const sourceTypeLabel = this.resolveSourceTypeLabel(rawSourceType ?? undefined);
+        const pageNumber = Number(meta.page_number ?? meta.page ?? 1) || 1;
+        const sourceUrl = (meta.source_url as string) || (storedMeta.source_url as string) || null;
+
+        return {
+          header: `[${index + 1}] ${title} (${sourceTypeLabel}${sourceUrl ? ` - ${sourceUrl}` : ''}) — Page ${pageNumber}`,
+          content: chunk.pageContent,
+          title,
+          sourceType: rawSourceType,
+          page: pageNumber,
+          sourceUrl,
+        };
+      });
+
+      const context = contextEntries
+        .map(entry => `${entry.header}\n${entry.content}`)
         .join('\n\n');
 
-      // Create prompt template
       const promptTemplate = PromptTemplate.fromTemplate(`
-You are a helpful assistant that answers questions based on the provided PDF documents. 
-Use only the information from the documents below to answer the user's question.
-If the answer cannot be found in the documents, say "I cannot find the answer to your question in the provided documents."
+You are a helpful assistant that answers questions using the numbered source excerpts below.
+Use only those excerpts to construct a clear and direct response.
+If the answer cannot be found in the excerpts, respond with "I cannot find the answer to your question in the provided sources."
+Do not include citations, reference markers, or a source list in your response.
 
-Context from documents:
+Source excerpts:
 {context}
 
 Question: {question}
 
-Answer based on the documents:`);
+Answer:`);
 
-      // Create the chain
       const chain = RunnableSequence.from([
         promptTemplate,
         this.openai,
         new StringOutputParser(),
       ]);
 
-      // Generate answer
       const answer = await chain.invoke({
         context,
         question: query,
       });
 
-      return answer;
+      const trimmedAnswer = typeof answer === 'string' ? answer.trim() : '';
+
+      return trimmedAnswer;
     } catch (error) {
       console.error('Error generating answer:', error);
       throw error;
@@ -234,14 +326,14 @@ Answer based on the documents:`);
       }
 
       if (!this.vectorStore) {
-        return "I don't have any documents to search through. Please upload some PDFs first.";
+        return "I don't have any sources to search through. Please upload documents, URLs, or screenshots first.";
       }
 
       // Search for relevant chunks
       const relevantChunks = await this.searchRelevantChunks(query, 5);
       
       if (relevantChunks.length === 0) {
-        return "I couldn't find any relevant information in the documents to answer your question.";
+        return "I couldn't find any relevant information in your sources to answer that question.";
       }
 
       // Generate answer
@@ -269,6 +361,7 @@ Answer based on the documents:`);
   async resetVectorStore(): Promise<void> {
     this.vectorStore = null;
     this.isInitialized = false;
+    this.documentMetadata.clear();
   }
 }
 

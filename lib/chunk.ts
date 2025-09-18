@@ -10,6 +10,9 @@ export interface DocumentChunk {
     source: string;
     page: number;
     chunk_index: number;
+    title?: string;
+    source_type?: string;
+    source_url?: string;
   };
 }
 
@@ -38,7 +41,12 @@ export class PDFProcessor {
     }
   }
 
-  async chunkText(text: string, documentId: string, pageCount: number): Promise<DocumentChunk[]> {
+  async chunkText(
+    text: string,
+    documentId: string,
+    pageCount: number,
+    extraMeta: Partial<DocumentChunk['metadata']> = {}
+  ): Promise<DocumentChunk[]> {
     try {
       const chunks = await this.textSplitter.splitText(text);
       
@@ -50,6 +58,7 @@ export class PDFProcessor {
         chunk_index: index,
         metadata: {
           source: documentId,
+          ...extraMeta,
           page: Math.floor((index / chunks.length) * pageCount) + 1,
           chunk_index: index,
         }
@@ -60,17 +69,23 @@ export class PDFProcessor {
     }
   }
 
-  async processPDF(buffer: Buffer, documentId: string): Promise<{
+  async processPDF(
+    buffer: Buffer,
+    documentId: string,
+    extraMeta: Partial<DocumentChunk['metadata']> = {}
+  ): Promise<{
     chunks: DocumentChunk[];
     pageCount: number;
+    text: string;
   }> {
     try {
       const { text, pageCount } = await this.extractTextFromPDF(buffer);
-      const chunks = await this.chunkText(text, documentId, pageCount);
+      const chunks = await this.chunkText(text, documentId, pageCount, extraMeta);
       
       return {
         chunks,
-        pageCount
+        pageCount,
+        text
       };
     } catch (error) {
       console.error('Error processing PDF:', error);

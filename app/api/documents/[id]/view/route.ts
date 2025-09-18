@@ -4,7 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 
 export const runtime = "nodejs";
 
-// GET - Get signed URL for viewing a document
+// GET - Get preview metadata for a document
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -17,10 +17,9 @@ export async function GET(
 
   try {
     const { id } = await params;
-    // First, verify the document belongs to the user
     const { data: document, error: fetchError } = await supabaseAdmin
       .from("documents")
-      .select("storage_path, status")
+      .select("storage_path, status, source_type, source_url, title")
       .eq("id", id)
       .eq("user_id", userId)
       .single();
@@ -31,32 +30,80 @@ export async function GET(
 
     if (document.status === "failed") {
       return NextResponse.json({ 
-        error: "Document processing failed",
+        error: "Source processing failed",
         status: document.status
       }, { status: 400 });
     }
 
-    // Allow viewing even if status is "processing" - just show a warning
-    if (document.status === "processing") {
-      console.warn(`Document ${id} is still processing, but allowing view`);
+    // Fetch a short preview snippet from the first chunk when available
+    const { data: snippetData } = await supabaseAdmin
+      .from("document_chunks")
+      .select("content")
+      .eq("document_id", id)
+      .order("chunk_index", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    const snippet = snippetData?.content?.slice(0, 600) ?? null;
+
+    if (document.source_type === "pdf") {
+      if (!document.storage_path) {
+        return NextResponse.json({ error: "PDF is missing from storage" }, { status: 404 });
+      }
+      const { data: signedUrl, error: urlError } = await supabaseAdmin.storage
+        .from("pdfs")
+        .createSignedUrl(document.storage_path, 3600);
+
+      if (urlError) {
+        return NextResponse.json({ error: urlError.message }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        type: "pdf",
+        status: document.status,
+        title: document.title,
+        signedUrl: signedUrl.signedUrl,
+        sourceUrl: null,
+        snippet,
+        expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+      });
     }
 
-    // Generate signed URL for the PDF
-    const { data: signedUrl, error: urlError } = await supabaseAdmin.storage
-      .from("pdfs")
-      .createSignedUrl(document.storage_path, 3600); // 1 hour expiry
+    if (document.source_type === "screenshot") {
+      if (!document.storage_path) {
+        return NextResponse.json({ error: "Screenshot is missing from storage" }, { status: 404 });
+      }
 
-    if (urlError) {
-      return NextResponse.json({ error: urlError.message }, { status: 500 });
+      const { data: signedUrl, error: urlError } = await supabaseAdmin.storage
+        .from("pdfs")
+        .createSignedUrl(document.storage_path, 3600);
+
+      if (urlError) {
+        return NextResponse.json({ error: urlError.message }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        type: "screenshot",
+        status: document.status,
+        title: document.title,
+        signedUrl: signedUrl.signedUrl,
+        sourceUrl: null,
+        snippet,
+        expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+      });
     }
 
-    return NextResponse.json({ 
-      url: signedUrl.signedUrl,
-      expiresAt: new Date(Date.now() + 3600 * 1000).toISOString()
+    return NextResponse.json({
+      type: document.source_type,
+      status: document.status,
+      title: document.title,
+      signedUrl: null,
+      sourceUrl: document.source_url,
+      snippet,
     });
 
   } catch (error) {
-    console.error("Error generating signed URL:", error);
+    console.error("Error preparing document preview:", error);
     return NextResponse.json({ 
       error: "Internal server error" 
     }, { status: 500 });

@@ -1,19 +1,8 @@
 // Fallback RAG system that works without OpenAI API calls
 // Uses simple database keyword search against stored chunks
 import { supabaseAdmin } from './supabaseAdmin';
-
-export interface DocumentChunk {
-  id: string;
-  document_id: string;
-  content: string;
-  page_number: number;
-  chunk_index: number;
-  metadata: {
-    source: string;
-    page: number;
-    chunk_index: number;
-  };
-}
+import type { DocumentChunk } from './chunk';
+import { SOURCE_TYPE_LABELS } from './sourceTypes';
 
 export class FallbackRAGSystem {
   private isInitialized = false;
@@ -92,6 +81,29 @@ export class FallbackRAGSystem {
     return Array.from(patterns);
   }
 
+  private async loadDocumentMetadata(documentIds: string[]): Promise<Map<string, { title: string | null; source_type: string | null; source_url: string | null }>> {
+    if (documentIds.length === 0) return new Map();
+    const { data, error } = await supabaseAdmin
+      .from('documents')
+      .select('id,title,source_type,source_url')
+      .in('id', documentIds);
+
+    if (error) {
+      console.error('Failed to fetch document metadata for fallback mode:', error);
+      return new Map();
+    }
+
+    const map = new Map<string, { title: string | null; source_type: string | null; source_url: string | null }>();
+    (data || []).forEach(doc => map.set(doc.id, doc));
+    return map;
+  }
+
+  private sourceTypeLabel(type?: string | null): string | null {
+    if (!type) return null;
+    const labels = SOURCE_TYPE_LABELS as Record<string, string>;
+    return labels[type] ?? type;
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async initializeVectorStore(_userId: string, _documentIds: string[]): Promise<void> {
     // No-op for fallback mode
@@ -122,14 +134,14 @@ export class FallbackRAGSystem {
       }
 
       if (documentIds.length === 0) {
-        return "I don't have any documents to search through. Please upload some PDFs first.";
+        return "I don't have any sources to search through. Please upload documents, URLs, or screenshots first.";
       }
 
       const ql = query.toLowerCase();
       // 1) Summarization-style questions
       if (/\b(what is (this|the) (pdf|document)|summary|summarize|overview|about)\b/.test(ql)) {
         const text = await this.fetchAllText(documentIds);
-        if (!text) return "I couldn't read any content from your PDFs yet.";
+        if (!text) return "I couldn't read any content from your sources yet.";
         const summary = this.summarize(text, 3);
         return `Summary: ${summary}`;
       }
@@ -149,16 +161,30 @@ export class FallbackRAGSystem {
           .limit(10);
         const hits = (data || []) as { content: string; page_number: number; document_id: string }[];
         if (hits.length === 0) {
-          return `I couldn't find any mention of "${skill}" in the PDFs.`;
+          return `I couldn't find any mention of "${skill}" in your sources.`;
         }
+        const docMap = await this.loadDocumentMetadata(Array.from(new Set(hits.map(h => h.document_id))));
         const affirmative = hits.some(h => variants.some(v => h.content.toLowerCase().includes(v)));
-        const snippets = hits.map(h => {
+        const details = hits.map(h => {
+          const info = docMap.get(h.document_id);
+          const title = info?.title ?? h.document_id;
+          const typeLabel = this.sourceTypeLabel(info?.source_type);
           const idx = Math.max(...variants.map(v => h.content.toLowerCase().indexOf(v)));
           const start = Math.max(0, (idx === -1 ? 0 : idx) - 60);
           const end = Math.min(h.content.length, (idx === -1 ? 120 : idx + 60));
-          return `- p.${h.page_number}: "${h.content.slice(start, end).replace(/\s+/g, ' ').trim()}"`;
-        });
-        return `${affirmative ? 'Yes' : 'Not explicitly mentioned'} — looking for "${skill}".\nTop matches:\n${snippets.join('\n')}`;
+          const snippet = h.content.slice(start, end).replace(/\s+/g, ' ').trim();
+          const parts = [title];
+          if (typeLabel) parts.push(typeLabel);
+          parts.push(`page ${h.page_number}`);
+          const location = parts.join(' • ');
+          const urlNote = info?.source_url ? ` (${info.source_url})` : '';
+          return `${location}${urlNote}: "${snippet}"`;
+        }).slice(0, 3);
+        const header = affirmative
+          ? `Yes — the sources mention "${skill}".`
+          : `Not explicitly mentioned, but related text found for "${skill}".`;
+        const detailText = details.join(' ');
+        return detailText ? `${header} ${detailText}` : header;
       }
 
       // Very simple keyword-driven search without embeddings
@@ -194,28 +220,37 @@ export class FallbackRAGSystem {
       if (hits.length === 0) {
         // As a fallback, return a brief general summary to provide context
         const text = await this.fetchAllText(documentIds);
-        if (!text) return "I couldn't find relevant information or read the PDFs.";
+        if (!text) return "I couldn't find relevant information or read the sources.";
         const summary = this.summarize(text, 2);
         return `I couldn't find an exact match. Here's a brief summary instead: ${summary}`;
       }
 
-      // Build a concise, deterministic answer
-      const snippets = hits.map(h => {
+      const docMap = await this.loadDocumentMetadata(Array.from(new Set(hits.map(h => h.document_id))));
+      const details = hits.map(h => {
         const idx = h.content.toLowerCase().indexOf(term[0]);
         const start = Math.max(0, idx - 60);
         const end = Math.min(h.content.length, (idx === -1 ? 120 : idx + 60));
         const snippet = h.content.slice(start, end).replace(/\s+/g, ' ').trim();
-        return `- p.${h.page_number}: "${snippet}"`;
-      });
+        const info = docMap.get(h.document_id);
+        const title = info?.title ?? h.document_id;
+        const typeLabel = this.sourceTypeLabel(info?.source_type);
+        const parts = [title];
+        if (typeLabel) parts.push(typeLabel);
+        parts.push(`page ${h.page_number}`);
+        const location = parts.join(' • ');
+        const urlNote = info?.source_url ? ` (${info.source_url})` : '';
+        return `${location}${urlNote}: "${snippet}"`;
+      }).slice(0, 3);
 
       // Lightweight yes/no heuristic for skill presence
       const skill = term.find(t => /[a-z]+/.test(t)) || term[0];
       const affirmative = hits.some(h => h.content.toLowerCase().includes(skill));
       const header = affirmative
-        ? `Yes — the PDFs mention "${skill}".`
+        ? `Yes — the sources mention "${skill}".`
         : `Not explicitly mentioned, but related text found for "${skill}".`;
 
-      return `${header}\nTop matches:\n${snippets.join('\n')}`;
+      const detailText = details.join(' ');
+      return detailText ? `${header} ${detailText}` : header;
     } catch (error) {
       console.error('Error in fallback RAG:', error);
       return "I encountered an error while processing your question. Please try again later.";

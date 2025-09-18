@@ -138,18 +138,18 @@ The application will be available at `http://localhost:3000`
 ```
 ├── app/
 │   ├── api/
-│   │   ├── upload/route.tsx          # PDF upload endpoint
+│   │   ├── upload/route.tsx          # Source upload endpoint (PDF, URL, screenshot)
 │   │   └── documents/
 │   │       ├── route.tsx             # Document management
 │   │       └── [id]/
 │   │           ├── route.tsx         # Get/update specific document
-│   │           └── view/route.tsx    # Get signed URL for viewing
+│   │           └── view/route.tsx    # Source preview metadata (signed URLs, snippets)
 │   ├── layout.tsx
 │   └── page.tsx                      # Main application page
 ├── components/
 │   ├── DocumentList.tsx              # Document management interface
-│   ├── PdfFilePicker.tsx             # File upload component
-│   ├── PdfViewer.tsx                 # PDF viewing component
+│   ├── SourceUploader.tsx            # Multi-source upload component
+│   ├── DocumentViewer.tsx            # Source-aware preview component
 │   └── ui/button.tsx                 # UI components
 ├── lib/
 │   └── supabaseAdmin.tsx             # Supabase admin client
@@ -164,17 +164,18 @@ The application will be available at `http://localhost:3000`
 
 ### For Authenticated Users
 1. **Dashboard**: Access your personal dashboard with documents and chats
-2. **Upload PDFs**: Click "Upload PDFs" to select and upload multiple PDF files
-3. **Manage Documents**: View, delete, and organize your uploaded PDFs
-4. **Create Chats**: Start new conversations with your documents
+2. **Add Sources**: Click "Add Sources" to upload PDFs, scrape URLs, or OCR screenshots
+3. **Preview & Manage**: View type-aware previews, remove sources, or re-upload as needed
+4. **Create Chats**: Start new conversations grounded in your selected sources
 5. **Multiple Chats**: Each user can have multiple separate chat sessions
-6. **Secure Access**: All data is isolated per user - you can only see your own content
+6. **Export**: Download a transcript with inline citations via "Export PDF"
+7. **Secure Access**: All data is isolated per user - you can only see your own content
 
 ## Security Features
 
 - **Row Level Security**: Users can only access their own documents
 - **Signed URLs**: PDFs are accessed via time-limited signed URLs
-- **File Validation**: Only PDF files are accepted for upload
+- **File Validation**: Only PDF (application/pdf) and screenshot (PNG/JPEG) uploads are accepted; URLs are validated before scraping
 - **Authentication**: All endpoints require valid Clerk authentication
 
 ## Troubleshooting
@@ -185,6 +186,8 @@ The application will be available at `http://localhost:3000`
 2. **PDFs not loading**: Verify signed URL generation and storage permissions
 3. **Authentication errors**: Ensure Clerk keys are correctly configured
 4. **Database errors**: Run the `supabase-setup.sql` script to ensure proper table setup
+5. **Puppeteer launch errors**: Install system dependencies for Chromium or set `PUPPETEER_EXECUTABLE_PATH` to a supported browser binary
+6. **Screenshot OCR failures**: Confirm `OPENAI_API_KEY` is set and the account has access to vision-capable models
 
 ### Debug Mode
 
@@ -195,9 +198,9 @@ NODE_ENV=development
 
 ## Next Steps
 
-- Implement AI chat functionality with the uploaded PDFs
-- Add PDF text extraction and indexing
-- Implement document search capabilities
+- Add additional ingestion adapters (DOCX, Markdown, spreadsheets)
+- Persist embeddings in Supabase `pgvector` for large corpora
+- Introduce streaming responses and citation highlighting in the UI
 - Add batch operations for document management
 - Implement document sharing features
 

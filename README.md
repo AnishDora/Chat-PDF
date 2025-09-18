@@ -1,22 +1,29 @@
 # Chat-PDF
 
-Chat-PDF is a **Next.js** web app that lets you upload, index, and chat
-with your own PDFs. It features a clean, modern UI with an integrated
-PDF viewer and supports both AI-powered and local fallback retrieval
-modes.
+Chat-PDF is a **Next.js** knowledge assistant that lets you upload,
+index, and chat with your own sources. Bring PDFs, scraped URLs, and OCR'd
+screenshots into a single workspace, then ask grounded questions with
+clear, source-aware answers, one-click exports, and graceful fallbacks
+when external AI isn't available.
 
 ------------------------------------------------------------------------
 
 ## ✨ Features
 
--   **Multiple PDF Uploads:** Store files in Supabase Storage.
--   **Server-Side Text Extraction & Chunking:** Automatically processes
-    PDFs.
--   **Context-Grounded Chat:** Ask questions and get answers strictly
-    from your PDFs.
--   **AI or Fallback Mode:** Uses OpenAI + embeddings when available,
-    otherwise falls back to keyword/full-text search with summaries.
--   **Modern UI:** Smooth, chat-style interface with inline PDF viewing.
+-   **Upload Any Source:** PDFs (pdf-parse), web pages (Puppeteer + Cheerio),
+    and screenshots (OpenAI Vision OCR) become searchable instantly.
+-   **Smart Chunking (1000 chars):** Unlimited sources, token-efficient
+    retrieval, automatic AI-generated titles, and Supabase-backed storage.
+-   **Grounded Answers Without Citation Noise:** Responses summarize the
+    retrieved passages directly, leaning on metadata (title, type, URL)
+    without appending citation markers or footers.
+-   **One-Click PDF Exports:** Share conversations with polished, timestamped
+    transcripts using jsPDF.
+-   **Graceful Fallback:** When embeddings or OpenAI quota are unavailable,
+    the app switches to deterministic keyword + full-text search with
+    contextual summaries.
+-   **Modern UI:** Source-aware viewer (PDF iframe, web snippets, OCR preview)
+    alongside a chat-first interface with automatic chat renaming.
 
 ------------------------------------------------------------------------
 
@@ -25,17 +32,19 @@ modes.
 -   **Framework:** Next.js App Router (Node.js runtime routes)
 -   **Database & Storage:** Supabase (Postgres, Storage, Auth optional)
 -   **Auth (Optional):** Clerk, or bring your own
+-   **Ingestion:** `pdf-parse`, `puppeteer`, `cheerio`, and OpenAI Vision OCR
 -   **RAG Layer:** LangChain (OpenAI chat + embeddings) + local
     in-memory vector store fallback
 -   **Fallback Retrieval:** Supabase SQL full‑text/ILIKE search +
     heuristic summaries
+-   **Exports:** jsPDF client-side PDF generation
 
 ------------------------------------------------------------------------
 
 ## 📂 Repository Layout (Highlights)
 
 -   `app/api/*` --- API routes for uploads, chats, messages, documents
--   `components/*` --- UI components (chat, PDF viewer, uploader)
+-   `components/*` --- UI components (chat, source viewer, uploader, export)
 -   `lib/rag.ts` --- RAG pipeline with OpenAI + vector store fallback
 -   `lib/rag-fallback.ts` --- Keyword/full-text fallback search with
     summaries
@@ -48,11 +57,11 @@ modes.
 
   Table                                            Purpose
   ------------------------------------------------ --------------------------------------------
-  `documents`                                      Stores uploaded PDFs and processing status
+  `documents`                                      Stores uploaded sources, type, metadata, status
   `document_chunks`                                Individual text chunks for retrieval
   `chats`                                          Chat sessions
   `messages`                                       Messages within a chat
-  **Storage:** `pdfs` bucket holds raw PDF files   
+  **Storage:** `pdfs` bucket holds raw uploads (PDFs + screenshots)
 
 ------------------------------------------------------------------------
 
@@ -74,10 +83,14 @@ modes.
         -   `NEXT_PUBLIC_SUPABASE_URL`
         -   `NEXT_PUBLIC_SUPABASE_ANON_KEY`
         -   `SUPABASE_SERVICE_ROLE_KEY`
-        -   `OPENAI_API_KEY` *(optional)*
+        -   `OPENAI_API_KEY` *(required for embeddings + screenshot OCR)*
         -   `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`
             *(optional)*
     -   Double-check values are correct before running the app
+
+    > ℹ️  Puppeteer downloads Chromium on install. In restricted
+    > environments you may need to set `PUPPETEER_EXECUTABLE_PATH` to an
+    > existing Chrome/Chromium binary.
 
 4.  **Run dev server:**
 
@@ -91,22 +104,30 @@ modes.
 
 ## 💬 Using the App
 
--   Click **"Add Documents"** to upload PDFs.
--   After processing, open a chat and ask questions.
--   Answers include page references or snippets from your documents.
--   Works offline in fallback mode (no external AI required).
+-   Click **"Add Sources"** to upload PDFs, scrape URLs, or OCR screenshots.
+-   The right panel shows a type-aware preview (PDF iframe, web snippet, OCR text).
+-   Ask questions once sources are ready; responses summarize what was
+    retrieved without bracketed citation markers or a trailing "Sources"
+    block.
+-   Export any conversation with **Export PDF**.
+-   No OpenAI key? The app falls back to deterministic keyword/full-text
+    search and concise summaries.
 
 ------------------------------------------------------------------------
 
 ## 🧠 RAG Behavior
 
 -   **With OpenAI:** Uses `gpt-4o-mini` + `text-embedding-3-small` via
-    LangChain.
-    -   In‑process memory vector store avoids FAISS issues.
--   **Without OpenAI:** Falls back to `rag-fallback.ts`
-    -   Keyword + full-text search in `document_chunks`
-    -   Heuristic summaries & alias-aware search (e.g. c#/c-sharp,
-        js/javascript)
+    LangChain. Context passages (with metadata like title, source type,
+    and URL) are injected into the prompt, but responses stay citation-free
+    for readability.
+    -   In-process memory vector store avoids FAISS native builds.
+    -   Screenshot OCR also relies on the OpenAI Vision API (same key).
+-   **Without OpenAI:** Falls back to `rag-fallback.ts`.
+    -   Keyword + full-text search in `document_chunks` with typed
+        source labels and per-document metadata.
+    -   Heuristic summaries & alias-aware search (e.g. c#/c-sharp,
+      js/javascript) keep responses helpful.
 
 ------------------------------------------------------------------------
 

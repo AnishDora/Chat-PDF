@@ -1,20 +1,25 @@
 -- Create documents table if it doesn't exist
-CREATE TABLE IF NOT EXISTS chat-pdf.documents (
+CREATE TABLE IF NOT EXISTS public.documents (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id text NOT NULL, -- Clerk user id string
-  title text NOT NULL, -- a nice name, usually file name without .pdf
-  storage_path text NOT NULL, -- where the file is stored in Supabase Storage
+  title text NOT NULL, -- human friendly title, may be AI generated
+  storage_path text, -- optional backing file storage location
+  source_type text NOT NULL DEFAULT 'pdf', -- 'pdf' | 'url' | 'screenshot'
+  source_url text, -- populated for scraped URLs
   bytes bigint, -- file size (optional)
-  page_count int, -- we'll fill this later during ingest (optional)
+  page_count int, -- populated during ingest when relevant
   status text DEFAULT 'processing', -- 'processing' | 'ready' | 'failed'
+  metadata jsonb DEFAULT '{}'::jsonb, -- arbitrary metadata per source
   created_at timestamptz DEFAULT now()
 );
 
+-- Backfill newer columns when the table already exists
 -- Create an index on user_id for faster queries
 CREATE INDEX IF NOT EXISTS idx_documents_user_id ON public.documents(user_id);
 
 -- Create an index on status for filtering
 CREATE INDEX IF NOT EXISTS idx_documents_status ON public.documents(status);
+CREATE INDEX IF NOT EXISTS idx_documents_source_type ON public.documents(source_type);
 
 -- Create an index on created_at for sorting
 CREATE INDEX IF NOT EXISTS idx_documents_created_at ON public.documents(created_at);
@@ -202,4 +207,3 @@ CREATE POLICY "Users can delete chat_documents for their chats" ON public.chat_d
       AND chats.user_id = auth.uid()::text
     )
   );
-

@@ -3,16 +3,21 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Send, FileText, ChevronDown, Check, Upload, X } from "lucide-react";
-import PdfFilePicker from "@/components/PdfFilePicker";
-import PdfViewer from "@/components/PdfViewer";
+import SourceUploader from "@/components/SourceUploader";
+import { DocumentViewer } from "@/components/DocumentViewer";
+import { ExportConversationButton } from "@/components/ExportConversationButton";
+import { SOURCE_TYPE_LABELS, type SourceType } from "@/lib/sourceTypes";
 
 interface Document {
   id: string;
   title: string;
   status: "processing" | "ready" | "failed";
-  bytes: number;
-  page_count?: number;
+  source_type: SourceType;
+  source_url?: string | null;
+  bytes?: number | null;
+  page_count?: number | null;
   created_at: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 interface Message {
@@ -27,6 +32,7 @@ interface UploadResult {
   file: string;
   error?: string;
   documentId?: string;
+  sourceType?: string;
 }
 
 interface ChatInterfaceProps {
@@ -55,8 +61,36 @@ export default function ChatInterface({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState(chatTitle);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const previousDocumentIdsRef = useRef<string[]>(documents.map(doc => doc.id));
 
   const selectedDocument = documents[selectedDocumentIndex];
+
+  useEffect(() => {
+    const previousIds = previousDocumentIdsRef.current;
+    const currentIds = documents.map(doc => doc.id);
+    const newIds = currentIds.filter(id => !previousIds.includes(id));
+
+    if (newIds.length > 0) {
+      const lastNewId = newIds[newIds.length - 1];
+      const newIndex = documents.findIndex(doc => doc.id === lastNewId);
+      if (newIndex !== -1) {
+        setSelectedDocumentIndex(newIndex);
+      }
+    } else if (selectedDocumentIndex >= currentIds.length) {
+      setSelectedDocumentIndex(currentIds.length > 0 ? currentIds.length - 1 : 0);
+    } else if (currentIds.length === 0 && selectedDocumentIndex !== 0) {
+      setSelectedDocumentIndex(0);
+    }
+
+    previousDocumentIdsRef.current = currentIds;
+  }, [documents, selectedDocumentIndex]);
+
+  const formatSize = (bytes?: number | null): string => {
+    if (!bytes || bytes <= 0) return "—";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round((bytes / 1024) * 10) / 10} KB`;
+    return `${Math.round((bytes / (1024 * 1024)) * 10) / 10} MB`;
+  };
 
   const handleSendMessage = () => {
     if (message.trim()) {
@@ -164,13 +198,18 @@ export default function ChatInterface({
             </div>
             
             <div className="flex items-center gap-2">
+              <ExportConversationButton
+                chatTitle={chatTitle}
+                documents={documents.map(doc => ({ id: doc.id, title: doc.title, source_type: doc.source_type }))}
+                messages={messages}
+              />
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => setShowDocumentUpload(!showDocumentUpload)}
               >
                 <Upload className="h-4 w-4 mr-1" />
-                {showDocumentUpload ? 'Hide Upload' : 'Add Documents'}
+                {showDocumentUpload ? 'Hide Upload' : 'Add Sources'}
               </Button>
             </div>
           </div>
@@ -179,9 +218,9 @@ export default function ChatInterface({
           {showDocumentUpload && (
             <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
               <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
-                Upload Documents to this Chat
+                Add knowledge sources to this chat
               </h3>
-              <PdfFilePicker 
+              <SourceUploader 
                 onUploadComplete={handleUploadComplete}
                 onUploadStart={() => {}}
               />
@@ -199,7 +238,7 @@ export default function ChatInterface({
               >
                 {documents.map((doc, index) => (
                   <option key={doc.id} value={index}>
-                    {doc.title} ({doc.status})
+                    [{SOURCE_TYPE_LABELS[doc.source_type]}] {doc.title} ({doc.status})
                   </option>
                 ))}
               </select>
@@ -264,7 +303,7 @@ export default function ChatInterface({
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask a question about your documents..."
+              placeholder="Ask a question about your sources..."
               className="flex-1 resize-none border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
               rows={2}
             />
@@ -279,15 +318,22 @@ export default function ChatInterface({
         </div>
       </div>
 
-      {/* Right side - PDF viewer and document management (30%) */}
+      {/* Right side - Source viewer and document management (30%) */}
       <div className="bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 min-h-0" style={{ width: "30%" }}>
         <div className="h-full flex flex-col min-h-0">
-          {/* PDF Header */}
+          {/* Source Header */}
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between">
-              <h3 className="font-medium text-gray-900 dark:text-white truncate">
-                {selectedDocument?.title || "No PDF selected"}
-              </h3>
+              <div className="min-w-0">
+                <h3 className="font-medium text-gray-900 dark:text-white truncate">
+                  {selectedDocument ? selectedDocument.title : "No source selected"}
+                </h3>
+                {selectedDocument && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {SOURCE_TYPE_LABELS[selectedDocument.source_type]} • {selectedDocument.status}
+                  </p>
+                )}
+              </div>
               {selectedDocument && (
                 <Button
                   size="sm"
@@ -301,28 +347,25 @@ export default function ChatInterface({
             </div>
             {documents.length > 1 && (
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {selectedDocumentIndex + 1} of {documents.length} PDFs
+                {selectedDocumentIndex + 1} of {documents.length} sources
               </p>
             )}
           </div>
           
-          {/* PDF Viewer or Document List */}
+          {/* Source Viewer or Document List */}
           <div className="flex-1 p-4">
             {selectedDocument ? (
-              <PdfViewer 
-                documentId={selectedDocument.id}
-                documentTitle={selectedDocument.title}
-              />
+              <DocumentViewer document={selectedDocument} />
             ) : (
               <div className="h-full">
                 <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
-                  Documents in this Chat
+                  Sources in this chat
                 </h4>
                 {documents.length === 0 ? (
                   <div className="text-center text-gray-500 dark:text-gray-400">
                     <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">No documents added yet</p>
-                    <p className="text-xs">Upload documents to start chatting</p>
+                    <p className="text-sm">No sources added yet</p>
+                    <p className="text-xs">Upload PDFs, URLs, or screenshots to start chatting</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -336,7 +379,7 @@ export default function ChatInterface({
                           {doc.title}
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {doc.status} • {Math.round(doc.bytes / 1024)} KB
+                          {SOURCE_TYPE_LABELS[doc.source_type]} • {doc.status} • {formatSize(doc.bytes)}
                         </p>
                       </div>
                     ))}

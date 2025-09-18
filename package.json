@@ -10,20 +10,22 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^6.31.6",
-
     "@langchain/community": "^0.3.56",
     "@langchain/core": "^0.3.77",
     "@langchain/openai": "^0.6.13",
-
     "@radix-ui/react-slot": "^1.2.3",
     "@supabase/supabase-js": "^2.57.2",
+    "cheerio": "^1.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "dotenv": "^17.2.2",
+    "dotenv": "^16.4.5",
+    "jspdf": "^3.0.2",
     "langchain": "^0.3.34",
     "lucide-react": "^0.542.0",
     "next": "15.5.2",
+    "openai": "^4.76.1",
     "pdf-parse": "^1.1.1",
+    "puppeteer": "^23.7.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "tailwind-merge": "^3.3.1"
@@ -31,6 +33,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@types/jspdf": "^2.0.0",
     "@types/node": "^20",
     "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19",
