@@ -70,8 +70,7 @@ modes.
 
 3.  **Configure environment:**
 
-    -   Copy `.env.local.example` → `.env.local`
-    -   Fill in:
+    -   Create a `.env.local` file and set:
         -   `NEXT_PUBLIC_SUPABASE_URL`
         -   `NEXT_PUBLIC_SUPABASE_ANON_KEY`
         -   `SUPABASE_SERVICE_ROLE_KEY`
@@ -123,7 +122,7 @@ modes.
 ## 🔐 Security & Secrets
 
 -   Never commit real API keys. `.env*` is git-ignored.
--   Use `.env.local.example` to document required env vars.
+-   Required env vars are documented here; do not commit `.env*` files.
   
 
 ------------------------------------------------------------------------
